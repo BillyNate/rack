@@ -37,11 +37,14 @@
 					nodes: [],
 					links: []
 				};
+				let highlightNodes = [],
+    				highlightLink = null;
 				var gunKeys = [],
 					gunSouls = [],
 					gunRefs = { exist: {}, setup: {} };
 
 				// Configure the ForceGraph:
+				forceGraph.d3Force('link').distance(link => 50);
 				forceGraph
 					.nodeId('#')
 					.nodeLabel('#')
@@ -50,16 +53,47 @@
 					.linkTarget('target')
 					.linkDirectionalParticles(1)
 					.nodeAutoColorBy('group')
+					.onLinkHover(link =>
+					{
+						highlightLink = link;
+						highlightNodes = link ? [link.source, link.target] : [];
+					})
+					.linkCanvasObjectMode(() => 'after')
+					.linkCanvasObject((link, ctx, globalScale) =>
+					{
+						if(link == highlightLink)
+						{
+							const start = link.source;
+							const end = link.target;
+							
+							// calculate label positioning
+							const textPos = Object.assign(...['x', 'y'].map(c => (
+							{
+								[c]: link.source[c] + (link.target[c] - link.source[c]) / 2 // calc middle point
+							})));
+
+							// estimate fontSize to fit in link length
+							const fontSize = 17 / globalScale;
+							ctx.font = fontSize + 'px Sans-Serif';
+							const textWidth = ctx.measureText(link.label).width;
+
+							// draw text label
+							ctx.save();
+							ctx.translate(textPos.x, textPos.y);
+
+							ctx.textAlign = 'center';
+							ctx.textBaseline = 'middle';
+							ctx.fillStyle = 'darkgrey';
+							ctx.fillText(link.label, 0, 0);
+							ctx.restore();
+						}
+					})
 					.nodeCanvasObject((node, ctx, globalScale) =>
 					{
 						const label = node['#'].substring(0, 5) + (node['#'].length > 5 ? '…' : '');
-						const fontSize = 12 / globalScale;
-						ctx.font = '${fontSize}px Sans-Serif';
+						const fontSize = 17 / globalScale;
+						ctx.font = fontSize + 'px Sans-Serif';
 						const textWidth = ctx.measureText(label).width;
-						const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2); // some padding
-
-						ctx.fillStyle = 'rgba(255, 255, 255, 0)';
-						ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions);
 
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'middle';
@@ -79,8 +113,7 @@
 					graphData.nodes[i]; // More attributes?
 
 					// Add link if target node exists:
-					var tmp = Object.keys(data);
-					tmp.forEach(function(attrKey)
+					Object.keys(data).forEach(function(attrKey)
 					{
 						if(typeof data[attrKey] === 'object')
 						{
@@ -88,7 +121,7 @@
 							{
 								if(gunRefs.exist[nodeKey])
 								{
-									if(gunRefs.exist[nodeKey].indexOf(data[attrKey]['#']) >= 0)
+									if(gunRefs.exist[nodeKey][data[attrKey]['#']])
 									{
 										return;
 									}
@@ -96,42 +129,47 @@
 
 								if(gunSouls.indexOf(data[attrKey]['#']) >= 0)
 								{
-									graphData.links.push({ 'source': nodeKey, 'target': data[attrKey]['#'] });
+									graphData.links.push({ 'source': nodeKey, 'target': data[attrKey]['#'], label: attrKey });
 									if(!gunRefs.exist[nodeKey])
 									{
-										gunRefs.exist[nodeKey] = Array();
+										gunRefs.exist[nodeKey] = {};
 									}
-									gunRefs.exist[nodeKey].push(data[attrKey]['#']);
+									gunRefs.exist[nodeKey][data[attrKey]['#']] = { label: attrKey };
 								}
 								else
 								{
 									// If target nodes does not exist, add it to this array to handle later on:
 									if(!gunRefs.setup[data[attrKey]['#']])
 									{
-										gunRefs.setup[data[attrKey]['#']] = Array();
+										gunRefs.setup[data[attrKey]['#']] = {};
 									}
-									gunRefs.setup[data[attrKey]['#']].push(nodeKey);
+									gunRefs.setup[data[attrKey]['#']][nodeKey] = { label: attrKey };
 								}
 							}
 						}
 					});
-
+					
+					// Go over all links stashed in the gunRefs.setup to add them now that all nodes are added:
 					if(gunRefs.setup[nodeKey])
 					{
-						gunRefs.setup[nodeKey];
-						while(gunRefs.setup[nodeKey].length > 0) // Assume all nodes in the array still exist
+						let sourceNodes = Object.keys(gunRefs.setup[nodeKey]);
+
+						while(sourceNodes.length > 0) // Assume all nodes in the array still exist
 						{
-							let sourceNode = gunRefs.setup[nodeKey].splice(0, 1)[0];
-							graphData.links.push({ 'source': sourceNode, 'target': nodeKey });
+							let sourceNode = gunRefs.setup[nodeKey][sourceNodes[0]]; // Currently handling this node...
+							graphData.links.push({ 'source': sourceNodes[0], 'target': nodeKey, label: sourceNode.label });
 							if(!gunRefs.exist[sourceNode])
 							{
-								gunRefs.exist[sourceNode] = Array();
+								gunRefs.exist[sourceNode] = {};
 							}
-							gunRefs.exist[sourceNode].push(nodeKey);
+							gunRefs.exist[sourceNode][sourceNodes[0]] = { label: sourceNode.label };
+							
+							sourceNodes.splice(0, 1);
+							delete gunRefs.setup[nodeKey][sourceNodes[0]];
 						}
 						delete gunRefs.setup[nodeKey];
 					}
-
+					
 					forceGraph.graphData(graphData);
 				}
 				
