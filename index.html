@@ -45,9 +45,28 @@
 				forceGraph
 					.nodeId('#')
 					.nodeLabel('#')
+					.nodeRelSize(19)
 					.linkSource('source')
 					.linkTarget('target')
-					.linkDirectionalParticles(1);
+					.linkDirectionalParticles(1)
+					.nodeAutoColorBy('group')
+					.nodeCanvasObject((node, ctx, globalScale) =>
+					{
+						const label = node['#'].substring(0, 5) + (node['#'].length > 5 ? '…' : '');
+						const fontSize = 12 / globalScale;
+						ctx.font = '${fontSize}px Sans-Serif';
+						const textWidth = ctx.measureText(label).width;
+						const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2); // some padding
+
+						ctx.fillStyle = 'rgba(255, 255, 255, 0)';
+						ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions);
+
+						ctx.textAlign = 'center';
+						ctx.textBaseline = 'middle';
+						ctx.fillStyle = node.color;
+						ctx.fillText(label, node.x, node.y);
+					})
+					.onNodeHover(node => document.getElementById('graph').style.cursor = node ? 'pointer' : null);
 				
 				// Prepare listener function:
 				function onNodeChange(data, nodeKey)
@@ -60,12 +79,12 @@
 					graphData.nodes[i]; // More attributes?
 
 					// Add link if target node exists:
-					var tmp = Object.keys(data).reverse();
+					var tmp = Object.keys(data);
 					tmp.forEach(function(attrKey)
 					{
 						if(typeof data[attrKey] === 'object')
 						{
-							if(data[attrKey]['#'])
+							if(data[attrKey]['#'] && data[attrKey]['#'] != nodeKey)
 							{
 								if(gunRefs.exist[nodeKey])
 								{
