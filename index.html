@@ -1,0 +1,167 @@
+<html>
+	<head>
+		<title>Rack</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width">
+		<style type="text/css">
+			html, body { width: 100%; height: 100%; padding: 0; margin: 0; }
+		</style>
+		<script src="//cdn.jsdelivr.net/npm/gun/gun.js"></script>
+		<script src="//cdn.jsdelivr.net/npm/gun/lib/open.js"></script>
+		<script src="//unpkg.com/force-graph"></script>
+		<script>
+			// Create a hack to get all existing items from localStorage:
+			Gun.getAll = function()
+			{
+				// Mostly copied over from localStorage code
+				try{store = Gun.window.localStorage}catch(e){};
+				if(!store)
+				{
+					store = {setItem: function(k,v){this[k]=v}, removeItem: function(k){delete this[k]}, getItem: function(k){return this[k]}};
+				}
+
+				let prefix = 'gun/';
+				let gap = Gun.obj.ify(store.getItem('gap/' + prefix)) || {};
+				let disk = Gun.obj.ify(store.getItem(prefix));
+
+				return disk;
+			};
+		</script>
+		<script>
+			document.addEventListener('DOMContentLoaded', function(event)
+			{
+				// Initialize objects:
+				const forceGraph = ForceGraph()(document.getElementById('graph'));
+				window.gunDB = Gun({ localStorage: true }); // Currently attached to window, to easily access from browser console
+				var graphData = {
+					nodes: [],
+					links: []
+				};
+				var gunKeys = [],
+					gunSouls = [],
+					gunRefs = { exist: {}, setup: {} };
+
+				// Configure the ForceGraph:
+				forceGraph
+					.nodeId('#')
+					.nodeLabel('#')
+					.linkSource('source')
+					.linkTarget('target')
+					.linkDirectionalParticles(1);
+				
+				// Prepare listener function:
+				function onNodeChange(data, nodeKey)
+				{
+					let i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
+					if(i < 0)
+					{
+						i = graphData.nodes.push({ '#': nodeKey }) - 1;
+					}
+					graphData.nodes[i]; // More attributes?
+
+					// Add link if target node exists:
+					var tmp = Object.keys(data).reverse();
+					tmp.forEach(function(attrKey)
+					{
+						if(typeof data[attrKey] === 'object')
+						{
+							if(data[attrKey]['#'])
+							{
+								if(gunRefs.exist[nodeKey])
+								{
+									if(gunRefs.exist[nodeKey].indexOf(data[attrKey]['#']) >= 0)
+									{
+										return;
+									}
+								}
+
+								if(gunSouls.indexOf(data[attrKey]['#']) >= 0)
+								{
+									graphData.links.push({ 'source': nodeKey, 'target': data[attrKey]['#'] });
+									if(!gunRefs.exist[nodeKey])
+									{
+										gunRefs.exist[nodeKey] = Array();
+									}
+									gunRefs.exist[nodeKey].push(data[attrKey]['#']);
+								}
+								else
+								{
+									// If target nodes does not exist, add it to this array to handle later on:
+									if(!gunRefs.setup[data[attrKey]['#']])
+									{
+										gunRefs.setup[data[attrKey]['#']] = Array();
+									}
+									gunRefs.setup[data[attrKey]['#']].push(nodeKey);
+								}
+							}
+						}
+					});
+
+					if(gunRefs.setup[nodeKey])
+					{
+						gunRefs.setup[nodeKey];
+						while(gunRefs.setup[nodeKey].length > 0) // Assume all nodes in the array still exist
+						{
+							let sourceNode = gunRefs.setup[nodeKey].splice(0, 1)[0];
+							graphData.links.push({ 'source': sourceNode, 'target': nodeKey });
+							if(!gunRefs.exist[sourceNode])
+							{
+								gunRefs.exist[sourceNode] = Array();
+							}
+							gunRefs.exist[sourceNode].push(nodeKey);
+						}
+						delete gunRefs.setup[nodeKey];
+					}
+
+					forceGraph.graphData(graphData);
+				}
+				
+				// Walk through all nodes found in graph:
+				function processGraph(graph)
+				{
+					graph = graph || gunDB._.graph;
+					gunKeys = Object.keys(graph);
+					gunKeys.forEach(function(nodeKey)
+					{
+						// Keep track of already processed nodes/souls:
+						if(gunSouls.indexOf(graph[nodeKey]['_']['#']) < 0)
+						{
+							// Attach listener to node:
+							gunDB.get(nodeKey).on(onNodeChange);
+							gunSouls.push(graph[nodeKey]['_']['#']);
+						}
+					});
+				}
+				
+				// Use our hack to get existing nodes from localStorage:
+				processGraph(Gun.getAll());
+
+				// Another hack?: register listener for any new node:
+				gunDB._.root.on('put', function(at)
+				{
+					Object.keys(at.put).forEach(function(putKey)
+					{
+						if(gunSouls.indexOf(putKey) < 0)
+						{
+							gunDB.get(putKey).on(onNodeChange);
+							gunSouls.push(putKey);
+						}
+					});
+				});
+
+				let checkForChanges = setInterval(function()
+				{
+					let currentGunKeys = Object.keys(gunDB._.graph);
+					if(gunKeys.join(',') != currentGunKeys.join(','))
+					{
+						processGraph();
+						gunKeys = currentGunKeys;
+					}
+				}, 5000);
+			});
+		</script>
+	</head>
+	<body>
+		<div id="graph"></div>
+	</body>
+</html>
