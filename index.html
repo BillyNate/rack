@@ -52,7 +52,6 @@
 					.linkSource('source')
 					.linkTarget('target')
 					.linkDirectionalParticles(1)
-					.nodeAutoColorBy('group')
 					.onLinkHover(link =>
 					{
 						highlightLink = link;
@@ -83,7 +82,7 @@
 
 							ctx.textAlign = 'center';
 							ctx.textBaseline = 'middle';
-							ctx.fillStyle = 'darkgrey';
+							ctx.fillStyle = '#666666';
 							ctx.fillText(link.label, 0, 0);
 							ctx.restore();
 						}
@@ -97,7 +96,7 @@
 
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'middle';
-						ctx.fillStyle = node.color;
+						ctx.fillStyle = 'rgba(30, 144, 255, .7)';
 						ctx.fillText(label, node.x, node.y);
 					})
 					.onNodeHover(node => document.getElementById('graph').style.cursor = node ? 'pointer' : null);
