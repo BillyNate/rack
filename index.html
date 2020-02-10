@@ -38,6 +38,8 @@
 					links: []
 				};
 				let highlightNodes = [],
+					highlightNode = null,
+					openedNode = null,
     				highlightLink = null;
 				var gunKeys = [],
 					gunSouls = [],
@@ -89,17 +91,41 @@
 					})
 					.nodeCanvasObject((node, ctx, globalScale) =>
 					{
-						const label = node['#'].substring(0, 5) + (node['#'].length > 5 ? '…' : '');
 						const fontSize = 17 / globalScale;
 						ctx.font = fontSize + 'px Sans-Serif';
-						const textWidth = ctx.measureText(label).width;
+						const textWidth = ctx.measureText(node.label).width;
 
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'middle';
 						ctx.fillStyle = 'rgba(30, 144, 255, .7)';
-						ctx.fillText(label, node.x, node.y);
+						if(highlightNodes.indexOf(node) >= 0 || highlightNode == node || openedNode == node)
+						{
+							ctx.fillStyle = 'rgba(65, 105, 225, 1)';
+						}
+						ctx.fillText(node.label, node.x, node.y);
 					})
-					.onNodeHover(node => document.getElementById('graph').style.cursor = node ? 'pointer' : null);
+					.onNodeHover(node =>
+					{
+						document.getElementById('graph').style.cursor = node ? 'pointer' : null;
+						highlightNode = node;
+					})
+					.onNodeClick(node =>
+					{
+						if(node == openedNode)
+						{
+							openedNode = null;
+						}
+						else
+						{
+							openedNode = node;
+						}
+						forceGraph.graphData(graphData);
+					})
+					.onBackgroundClick(() =>
+					{
+						openedNode = null;
+						forceGraph.graphData(graphData);
+					});
 				
 				// Prepare listener function:
 				function onNodeChange(data, nodeKey)
@@ -107,14 +133,14 @@
 					let i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
 					if(i < 0)
 					{
-						i = graphData.nodes.push({ '#': nodeKey }) - 1;
+						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '') }) - 1;
 					}
-					graphData.nodes[i]; // More attributes?
 
-					// Add link if target node exists:
+					// Go over all attributes:
 					Object.keys(data).forEach(function(attrKey)
 					{
-						if(typeof data[attrKey] === 'object')
+						// Add link if target node exists:
+						if(data[attrKey] !== null && typeof data[attrKey] === 'object')
 						{
 							if(data[attrKey]['#'] && data[attrKey]['#'] != nodeKey)
 							{
