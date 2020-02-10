@@ -36,6 +36,10 @@
 				var graphData = {
 					nodes: [],
 					links: []
+				},
+					openedNodeGraphData = {
+					nodes: [],
+					links: []
 				};
 				let highlightNodes = [],
 					highlightNode = null,
@@ -98,7 +102,7 @@
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'middle';
 						ctx.fillStyle = 'rgba(30, 144, 255, .7)';
-						if(highlightNodes.indexOf(node) >= 0 || highlightNode == node || openedNode == node)
+						if(highlightNodes.indexOf(node) >= 0 || highlightNode == node || openedNode == node || node.type == 'attr')
 						{
 							ctx.fillStyle = 'rgba(65, 105, 225, 1)';
 						}
@@ -114,16 +118,32 @@
 						if(node == openedNode)
 						{
 							openedNode = null;
+							openedNodeGraphData.nodes = [];
+							openedNodeGraphData.links = [];
+							forceGraph.graphData(graphData);
 						}
-						else
+						else if(node.type == 'node')
 						{
 							openedNode = node;
+							openedNodeGraphData.nodes = [];
+							openedNodeGraphData.links = [];
+							Object.keys(node.attributes).forEach(function(attributeKey)
+							{
+								openedNodeGraphData.nodes.push({  type: 'attr', '#': attributeKey, 'label': attributeKey + ': ' + node.attributes[attributeKey]  });
+								openedNodeGraphData.links.push({ 'source': node['#'], 'target': attributeKey, 'label': '' });
+							});
+
+							let completeGraphData = { nodes: [], links: [] };
+							completeGraphData.nodes = graphData.nodes.concat(openedNodeGraphData.nodes);
+							completeGraphData.links = graphData.links.concat(openedNodeGraphData.links);
+							forceGraph.graphData(completeGraphData);
 						}
-						forceGraph.graphData(graphData);
 					})
 					.onBackgroundClick(() =>
 					{
 						openedNode = null;
+						openedNodeGraphData.nodes = [];
+						openedNodeGraphData.links = [];
 						forceGraph.graphData(graphData);
 					});
 				
@@ -133,7 +153,7 @@
 					let i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
 					if(i < 0)
 					{
-						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '') }) - 1;
+						i = graphData.nodes.push({ type: 'node', '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '…' : '') }) - 1;
 					}
 
 					// Go over all attributes:
@@ -172,6 +192,15 @@
 								}
 							}
 						}
+						// Add as simple attribute:
+						else if(typeof data[attrKey] === 'string')
+						{
+							if(!graphData.nodes[i]['attributes'])
+							{
+								graphData.nodes[i]['attributes'] = {};
+							}
+							graphData.nodes[i]['attributes'][attrKey] = data[attrKey];
+						}
 					});
 					
 					// Go over all links stashed in the gunRefs.setup to add them now that all nodes are added:
@@ -195,7 +224,10 @@
 						delete gunRefs.setup[nodeKey];
 					}
 					
-					forceGraph.graphData(graphData);
+					let completeGraphData = { nodes: [], links: [] };
+					completeGraphData.nodes = graphData.nodes.concat(openedNodeGraphData.nodes);
+					completeGraphData.links = graphData.links.concat(openedNodeGraphData.links);
+					forceGraph.graphData(completeGraphData);
 				}
 				
 				// Walk through all nodes found in graph:
