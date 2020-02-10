@@ -3,8 +3,25 @@
 		<title>Rack</title>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width">
+		<link href="//unpkg.com/sanitize.css" rel="stylesheet" />
+		<link href="//fonts.googleapis.com/css?family=Raleway" rel="stylesheet" />
 		<style type="text/css">
-			html, body { width: 100%; height: 100%; padding: 0; margin: 0; }
+			body { background-color: #f2f2f2; overflow: hidden; }
+			body, input, textarea, button, select { font-family: 'Raleway', sans-serif; }
+				body > div { position: absolute; }
+				.graph { top: 50px; right: 0; bottom: 0; left: 0; overflow: hidden; }
+				.topbar { top: 0; right: 0; left: 0; height: 50px; background-color: #fff; box-shadow: 0px 5px 8px -4px #ccc; }
+				.properties { top: 50px; right: -30px; bottom: 0; width: 330px; padding: 40px 0 0 40px; overflow: auto; background-color: #fff; box-shadow: -5px 0px 8px -4px #ccc; transition: right .4s cubic-bezier(0.175, 0.885, 0.320, 1.275); }
+				.properties.hidden { right: -335px; }
+					.properties > * { display: block; position: relative; padding: 0; margin: 0; }
+					.properties h3 { padding-left: 3px; margin-bottom: 10px; }
+					.properties ul { list-style: none; }
+						.properties li > * { display: block; position: relative; float: left; }
+						.properties input { width: calc((300px - (40px * 2)) / 2); padding: 3px; border: 1px solid #fff; }
+						.properties input:focus, .properties input:hover { border-color: #666; }
+						.properties input:not(:focus) { cursor: pointer; }
+						.properties a.link-to-node { text-decoration: none; color: #000; }
+						.properties input[name="key"]:placeholder-shown ~ a.link-to-node { display: none; }
 		</style>
 		<script src="//cdn.jsdelivr.net/npm/gun/gun.js"></script>
 		<script src="//cdn.jsdelivr.net/npm/gun/lib/open.js"></script>
@@ -31,8 +48,9 @@
 			document.addEventListener('DOMContentLoaded', function(event)
 			{
 				// Initialize objects:
-				const forceGraph = ForceGraph()(document.getElementById('graph'));
+				const forceGraph = ForceGraph()(document.getElementsByClassName('graph')[0]);
 				window.gunDB = Gun({ localStorage: true }); // Currently attached to window, to easily access from browser console
+				var state  = 'default';
 				var graphData = {
 					nodes: [],
 					links: []
@@ -44,6 +62,20 @@
 				var gunKeys = [],
 					gunSouls = [],
 					gunRefs = { exist: {}, setup: {} };
+				const attributesListItemHTML = document.createElement('li');
+				let attributesListItemChildrenHTML = [document.createElement('input'), document.createElement('input')];
+				attributesListItemChildrenHTML[0].type = attributesListItemChildrenHTML[1].type = 'input';
+				attributesListItemChildrenHTML[0].placeholder = attributesListItemChildrenHTML[0].name = 'key';
+				attributesListItemChildrenHTML[1].placeholder = attributesListItemChildrenHTML[1].name = 'value';
+				attributesListItemHTML.appendChild(attributesListItemChildrenHTML[0]);
+				attributesListItemHTML.appendChild(attributesListItemChildrenHTML[1]);
+				let attributesListItemNodeLink = document.createElement('a');
+				attributesListItemNodeLink.innerHTML = '&#9671;';
+				attributesListItemNodeLink.href = '#';
+				attributesListItemNodeLink.className = 'link-to-node';
+				attributesListItemHTML.appendChild(attributesListItemNodeLink);
+				let linkFromNode = '',
+				    linkAttribute = '';
 
 				// Configure the ForceGraph:
 				forceGraph.d3Force('link').distance(link => 50);
@@ -106,26 +138,175 @@
 					})
 					.onNodeHover(node =>
 					{
-						document.getElementById('graph').style.cursor = node ? 'pointer' : null;
+						document.getElementsByClassName('graph')[0].style.cursor = node ? 'pointer' : null;
 						highlightNode = node;
 					})
 					.onNodeClick(node =>
 					{
-						if(node == openedNode)
+						if(state == 'link')
+						{
+							// Remove potential existing link from graphData:
+							let existingLinkAt = -1,
+								listItem = document.querySelector('.properties li[data-soul="' + linkFromNode + '"][data-attr="' + linkAttribute + '"]');
+							existingLinkAt = graphData.links.findIndex(link => (link.source['#'] == linkFromNode && link.label == linkAttribute));
+							if(existingLinkAt >= 0)
+							{
+								graphData.links.splice(existingLinkAt, 1);
+							}
+
+							// Create new link in gunDB:
+							gunDB.get(linkFromNode).get(linkAttribute).put(gunDB.get(node['#']));
+							
+							// Set value in value:
+							listItem.querySelector('input[name="value"]').value = node['#'];
+							// Update link button icon:
+							listItem.querySelector('.link-to-node').innerHTML =  '&#9094;';
+
+							if(!listItem.classList.contains('ref'))
+							{
+								listItem.classList.add('ref');
+							}
+							state = 'default';
+						}
+						else if(node == openedNode)
 						{
 							openedNode = null;
 						}
 						else
 						{
 							openedNode = node;
+							document.querySelector('.properties h3').innerText = node['#'];
+							document.querySelector('.properties ul').innerHTML = '';
+							gunDB.get(node['#']).once(function(data)
+							{
+								Object.keys(data).forEach(function(attrKey)
+								{
+									if(data[attrKey] !== null && attrKey != '_')
+									{
+										let newListItem = attributesListItemHTML.cloneNode(true);
+										newListItem.dataset.soul = node['#'];
+										newListItem.dataset.attr = attrKey;
+										newListItem.querySelector('input[name="key"]').setAttribute('value', attrKey);
+										if(typeof data[attrKey] !== 'object')
+										{
+											newListItem.querySelector('input[name="value"]').setAttribute('value', data[attrKey]);
+										}
+										else
+										{
+											newListItem.querySelector('input[name="value"]').setAttribute('value', data[attrKey]['#']);
+											newListItem.classList.add('ref');
+											newListItem.querySelector('.link-to-node').href = '#' + data[attrKey]['#'];
+											newListItem.querySelector('.link-to-node').innerHTML =  '&#9094;';
+										}
+										document.querySelector('.properties ul').appendChild(newListItem);
+									}
+								});
+								let newListItem = attributesListItemHTML.cloneNode(true);
+								newListItem.dataset.soul = node['#'];
+								newListItem.querySelector('input[name="value"]').setAttribute('readonly', true);
+								document.querySelector('.properties ul').appendChild(newListItem);
+							});
 						}
+
+						// Update the forceGraph:
 						forceGraph.graphData(graphData);
+
+						document.querySelector('.properties').classList.remove('hidden');
 					})
 					.onBackgroundClick(() =>
 					{
 						openedNode = null;
 						forceGraph.graphData(graphData);
+						document.querySelector('.properties').classList.add('hidden');
 					});
+				
+				document.getElementsByClassName('properties')[0].addEventListener('focusin', (event) =>
+				{
+					if(event.target.parentElement.classList.contains('ref'))
+					{
+						event.target.parentElement.dataset.ref = event.target.value;
+						event.target.value = '';
+					}
+				});
+				document.getElementsByClassName('properties')[0].addEventListener('focusout', (event) =>
+				{
+					if(event.target.name == 'key') // if input is for a `key`
+					{
+						if(!('attr' in event.target.parentElement.dataset))
+						{
+							if(event.target.value.length > 0)
+							{
+								gunDB.get(event.target.parentElement.dataset.soul).get(event.target.value).put('');
+								event.target.parentElement.dataset.attr = event.target.value;
+								event.target.parentElement.querySelector('input[name="value"]').removeAttribute('readonly');
+								
+								// Add new line to list of properties:
+								let newListItem = attributesListItemHTML.cloneNode(true);
+								newListItem.dataset.soul = event.target.parentElement.dataset.soul;
+								newListItem.querySelector('input[name="value"]').setAttribute('readonly', true);
+								document.querySelector('.properties ul').appendChild(newListItem);
+							}
+						}
+						else if(event.target.value == event.target.parentElement.dataset.attr) // if new value is the same as the old value...
+						{
+							// Nothing changed, so do nothing ;)
+						}
+						else if(event.target.value.length > 0)
+						{
+							gunDB.get(event.target.parentElement.dataset.soul).get(event.target.value).put(event.target.parentElement.querySelector('input[name="value"]').value);
+							gunDB.get(event.target.parentElement.dataset.soul).get(event.target.parentElement.dataset.attr).put(null);
+							event.target.parentElement.dataset.attr = event.target.value;
+						}
+						else // if key is empty, remove attribute
+						{
+							gunDB.get(event.target.parentElement.dataset.soul).get(event.target.parentElement.dataset.attr).put(null);
+							// Remove line from .properties:
+							event.target.parentElement.parentNode.removeChild(event.target.parentElement);
+						}
+					}
+					else if(event.target.name == 'value') // if input is for a `value`
+					{
+						let writeValue = true;
+						if('ref' in event.target.parentElement.dataset)
+						{
+							if(event.target.value.length <= 0)
+							{
+								event.target.value =  event.target.parentElement.dataset.ref;
+								writeValue = false;
+							}
+							delete event.target.parentElement.dataset.ref;
+
+							// Update links in graphData:
+							let existingLinkAt = -1;
+							existingLinkAt = graphData.links.findIndex(link => (link.source['#'] == event.target.parentElement.dataset.soul && link.label == event.target.parentElement.dataset.attr));
+							if(existingLinkAt >= 0)
+							{
+								graphData.links.splice(existingLinkAt, 1); // Link is removed from graph links array here, but graph is update when node change is triggered in GUN
+							}
+							
+							// Update icon:
+							event.target.parentElement.querySelector('.link-to-node').innerHTML = '&#9671;';
+						}
+						if(writeValue)
+						{
+							gunDB.get(event.target.parentElement.dataset.soul).get(event.target.parentElement.dataset.attr).put(event.target.value);
+						}
+					}
+				});
+				document.getElementsByClassName('properties')[0].addEventListener('keyup', (event) =>
+				{
+					//console.log(event.target.name);
+				});
+				document.getElementsByClassName('properties')[0].addEventListener('click', (event) =>
+				{
+					if(event.target.classList.contains('link-to-node'))
+					{
+						event.preventDefault();
+						state = 'link';
+						linkFromNode = event.target.parentElement.dataset.soul;
+						linkAttribute = event.target.parentElement.dataset.attr;
+					}
+				});
 				
 				// Prepare listener function:
 				function onNodeChange(data, nodeKey)
@@ -189,8 +370,8 @@
 							}
 							gunRefs.exist[sourceNode][sourceNodes[0]] = { label: sourceNode.label };
 							
-							sourceNodes.splice(0, 1);
 							delete gunRefs.setup[nodeKey][sourceNodes[0]];
+							sourceNodes.splice(0, 1);
 						}
 						delete gunRefs.setup[nodeKey];
 					}
@@ -244,6 +425,11 @@
 		</script>
 	</head>
 	<body>
-		<div id="graph"></div>
+		<div class="graph"></div>
+		<div class="properties hidden">
+			<h3></h3>
+			<ul></ul>
+		</div>
+		<div class="topbar"></div>
 	</body>
 </html>
