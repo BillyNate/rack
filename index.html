@@ -5,6 +5,7 @@
 		<meta name="viewport" content="width=device-width">
 		<link href="//unpkg.com/sanitize.css" rel="stylesheet" />
 		<link href="//fonts.googleapis.com/css?family=Raleway" rel="stylesheet" />
+		<link href="//use.fontawesome.com/releases/v5.0.9/css/solid.css" rel="stylesheet" />
 		<style type="text/css">
 			body { background-color: #f2f2f2; overflow: hidden; }
 			body, input, textarea, button, select { font-family: 'Raleway', sans-serif; }
@@ -14,17 +15,17 @@
 				.properties { top: 50px; right: -30px; bottom: 0; width: 330px; padding: 40px 0 0 40px; overflow: auto; background-color: #fff; box-shadow: -5px 0px 8px -4px #ccc; transition: right .4s cubic-bezier(0.175, 0.885, 0.320, 1.275); }
 				.properties.hidden { right: -335px; }
 					.properties > * { display: block; position: relative; padding: 0; margin: 0; }
-					.properties h3 { padding-left: 3px; margin-bottom: 10px; }
+					.properties > .soul { width: 80%; padding-left: 3px; margin-bottom: 10px; font-size: 1.3em; }
 					.properties ul { list-style: none; }
 						.properties li > * { display: block; position: relative; float: left; }
 						.properties input { width: calc((300px - (40px * 2)) / 2); padding: 3px; border: 1px solid #fff; }
 						.properties input:focus, .properties input:hover { border-color: #666; }
 						.properties input:not(:focus) { cursor: pointer; }
+						.properties input[readonly] { border-color: #fff; cursor: default; }
 						.properties a.link-to-node { text-decoration: none; color: #000; }
 						.properties input[name="key"]:placeholder-shown ~ a.link-to-node { display: none; }
 		</style>
 		<script src="//cdn.jsdelivr.net/npm/gun/gun.js"></script>
-		<script src="//cdn.jsdelivr.net/npm/gun/lib/open.js"></script>
 		<script src="//unpkg.com/force-graph"></script>
 		<script>
 			// Create a hack to get all existing items from localStorage:
@@ -76,6 +77,8 @@
 				attributesListItemHTML.appendChild(attributesListItemNodeLink);
 				let linkFromNode = '',
 				    linkAttribute = '';
+				let newNodeButtonAt = -1,
+					newNodeAt = -1;
 
 				// Configure the ForceGraph:
 				forceGraph.d3Force('link').distance(link => 50);
@@ -105,10 +108,7 @@
 								[c]: link.source[c] + (link.target[c] - link.source[c]) / 2 // calc middle point
 							})));
 
-							// estimate fontSize to fit in link length
-							const fontSize = 17 / globalScale;
-							ctx.font = fontSize + 'px Sans-Serif';
-							const textWidth = ctx.measureText(link.label).width;
+							ctx.font = '10pt Raleway';
 
 							// draw text label
 							ctx.save();
@@ -123,18 +123,39 @@
 					})
 					.nodeCanvasObject((node, ctx, globalScale) =>
 					{
-						const fontSize = 17 / globalScale;
-						ctx.font = fontSize + 'px Sans-Serif';
-						const textWidth = ctx.measureText(node.label).width;
-
-						ctx.textAlign = 'center';
-						ctx.textBaseline = 'middle';
-						ctx.fillStyle = 'rgba(30, 144, 255, .7)';
-						if(highlightNodes.indexOf(node) >= 0 || highlightNode == node || openedNode == node)
+						if(node == graphData.nodes[newNodeButtonAt])
 						{
-							ctx.fillStyle = 'rgba(65, 105, 225, 1)';
+							let circleSize = 1;
+							ctx.beginPath();
+							ctx.arc(node.fx, node.fy, 12 * circleSize, 0, 2 * Math.PI, false);
+							ctx.fillStyle = 'rgba(0, 186, 197, 1)';
+							ctx.fill();
+							ctx.beginPath();
+							ctx.arc(node.fx, node.fy, 10 * circleSize, 0, 2 * Math.PI, false);
+							ctx.fillStyle = 'rgba(0, 102, 107, 1)';
+							ctx.fill();
+							ctx.fillStyle = 'rgba(0, 186, 197, 1)';
+							ctx.font = '900 9pt "Font Awesome 5 Free"';
+							ctx.fillText('\uF055', node.x, node.y);
 						}
-						ctx.fillText(node.label, node.x, node.y);
+						else if(node == graphData.nodes[newNodeAt])
+						{
+							ctx.fillStyle = 'rgba(0, 102, 107, 1)';
+							ctx.font = '900 12pt "Font Awesome 5 Free"';
+							ctx.fillText('\uF477', node.x, node.y);
+						}
+						else
+						{
+							ctx.font = '10pt Raleway';
+							ctx.textAlign = 'center';
+							ctx.textBaseline = 'middle';
+							ctx.fillStyle = 'rgba(0, 102, 107, 1)';
+							if(highlightNodes.indexOf(node) >= 0 || highlightNode == node || openedNode == node)
+							{
+								ctx.fillStyle = 'rgba(0, 186, 197, 1)';
+							}
+							ctx.fillText(node.label, node.x, node.y);
+						}
 					})
 					.onNodeHover(node =>
 					{
@@ -143,6 +164,24 @@
 					})
 					.onNodeClick(node =>
 					{
+						if(newNodeButtonAt >= 0)
+						{
+							if(node == graphData.nodes[newNodeButtonAt])
+							{
+								newNodeAt = newNodeButtonAt;
+								newNodeButtonAt = -1;
+								highlightNode = node;
+
+								let newSoul = Gun.state.lex() + Gun.text.random(7);
+								let soulElement = document.querySelector('.properties > .soul');
+								soulElement.removeAttribute('readonly');
+								soulElement.setAttribute('value', newSoul);
+								soulElement.value = newSoul;
+								soulElement.focus();
+								soulElement.select();
+							}
+						}
+						
 						if(state == 'link')
 						{
 							// Remove potential existing link from graphData:
@@ -172,11 +211,25 @@
 						{
 							openedNode = null;
 						}
+						else if(newNodeAt >= 0)
+						{
+							openedNode = node;
+							
+							document.querySelector('.properties ul').innerHTML = '';
+
+							let newListItem = attributesListItemHTML.cloneNode(true);
+							newListItem.dataset.soul = node['#'];
+							newListItem.querySelector('input[name="value"]').setAttribute('readonly', true);
+							document.querySelector('.properties ul').appendChild(newListItem);
+						}
 						else
 						{
 							openedNode = node;
-							document.querySelector('.properties h3').innerText = node['#'];
+
+							document.querySelector('.properties > .soul').setAttribute('value', node['#']);
+							document.querySelector('.properties > .soul').value = node['#'];
 							document.querySelector('.properties ul').innerHTML = '';
+
 							gunDB.get(node['#']).once(function(data)
 							{
 								Object.keys(data).forEach(function(attrKey)
@@ -213,11 +266,23 @@
 
 						document.querySelector('.properties').classList.remove('hidden');
 					})
-					.onBackgroundClick(() =>
+					.onBackgroundClick((event) =>
 					{
 						openedNode = null;
-						forceGraph.graphData(graphData);
 						document.querySelector('.properties').classList.add('hidden');
+						
+						let clickPosition = forceGraph.screen2GraphCoords(event.clientX - event.target.getBoundingClientRect().left, event.clientY - event.target.getBoundingClientRect().top);
+						if(newNodeButtonAt >= 0)
+						{
+							graphData.nodes[newNodeButtonAt].fx = clickPosition.x;
+							graphData.nodes[newNodeButtonAt].fy = clickPosition.y;
+						}
+						else
+						{
+							newNodeButtonAt = graphData.nodes.push({ '#': '', 'label': '', 'fx': clickPosition.x, 'fy': clickPosition.y }) - 1;
+						}
+
+						forceGraph.graphData(graphData);
 					});
 				
 				document.getElementsByClassName('properties')[0].addEventListener('focusin', (event) =>
@@ -292,6 +357,19 @@
 							gunDB.get(event.target.parentElement.dataset.soul).get(event.target.parentElement.dataset.attr).put(event.target.value);
 						}
 					}
+					else if(event.target.name == 'soul')
+					{
+						event.target.setAttribute('readonly', true);
+						event.target.blur();
+						//event.target.deselect();
+						if(event.target.value.length > 0)
+						{
+							// TODO: Check for collision with already existing node what accidental same name?
+							gunDB.get(event.target.value).put({ 'null': null });
+
+							document.querySelector('.properties li').dataset.soul = event.target.value;
+						}
+					}
 				});
 				document.getElementsByClassName('properties')[0].addEventListener('keyup', (event) =>
 				{
@@ -311,11 +389,28 @@
 				// Prepare listener function:
 				function onNodeChange(data, nodeKey)
 				{
-					let i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
+					let i = -1;
+					if(newNodeAt >= 0)
+					{
+						i = newNodeAt;
+						newNodeAt = -1;
+						graphData.nodes[i]['#'] = nodeKey;
+						graphData.nodes[i].label = nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '');
+						graphData.nodes[i].x = graphData.nodes[i].fx;
+						graphData.nodes[i].y = graphData.nodes[i].fy;
+						graphData.nodes[i].fx = graphData.nodes[i].fy = null;
+					}
+					else
+					{
+						i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
+					}
+					
 					if(i < 0)
 					{
 						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '') }) - 1;
 					}
+
+					// TODO: Check if newNode shizzle is >-1, then use to set position and currently opened node...
 
 					// Go over all attributes:
 					Object.keys(data).forEach(function(attrKey)
@@ -427,7 +522,7 @@
 	<body>
 		<div class="graph"></div>
 		<div class="properties hidden">
-			<h3></h3>
+			<input type="text" name="soul" value="" class="soul" readonly />
 			<ul></ul>
 		</div>
 		<div class="topbar"></div>
