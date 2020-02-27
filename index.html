@@ -16,6 +16,9 @@
 				.properties.hidden { right: -335px; }
 					.properties > * { display: block; position: relative; padding: 0; margin: 0; }
 					.properties > .soul { width: 80%; padding-left: 3px; margin-bottom: 10px; font-size: 1.3em; }
+					.properties button.delete { position: absolute; right: 45px; bottom: 10px; width: 1em; height: 2em; font-size: 1em; border: none; background: none; opacity: .5; cursor: pointer; text-indent: -999999px; overflow: hidden; transition: .2s opacity; }
+					.properties button.delete:hover { opacity: 1; }
+					.properties button.delete:before { display: block; position: absolute; content: "\f2ed"; font-family: 'Font Awesome 5 Free'; font-weight: 900; text-indent: 0; }
 					.properties ul { list-style: none; }
 						.properties li > * { display: block; position: relative; float: left; }
 						.properties input { width: calc((300px - (40px * 2)) / 2); padding: 3px; border: 1px solid #fff; }
@@ -384,6 +387,22 @@
 						linkFromNode = event.target.parentElement.dataset.soul;
 						linkAttribute = event.target.parentElement.dataset.attr;
 					}
+					else if(event.target.classList.contains('delete'))
+					{
+						// Tombstone node in gunDB:
+						let nodeSoul = event.target.parentElement.querySelector('ul li').dataset.soul;
+						gunDB.get(nodeSoul).once(function(data)
+						{
+							Object.keys(data).forEach(function(attrKey)
+							{
+								gunDB.get(nodeSoul).get(attrKey).put(null);
+							});
+							gunDB.get(nodeSoul).get('VOID').put(1);
+						});
+
+						// Close properties element:
+						document.querySelector('.properties').classList.add('hidden');
+					}
 				});
 				
 				// Prepare listener function:
@@ -405,9 +424,29 @@
 						i = graphData.nodes.findIndex((node) => node['#'] == nodeKey);
 					}
 					
-					if(i < 0)
+					if(i < 0 && !data['VOID']) // Node not yet added to graphData
 					{
 						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '') }) - 1;
+					}
+					else if(i >= 0 && data['VOID']) // Node in graphData, but now tombstoned
+					{
+						// Remove node from graphData:
+						graphData.nodes.splice(i, 1);
+
+						// Remove links from/to node from graphData:
+						for(let j=graphData.links.length-1; j>=0; j--)
+						{
+							if(graphData.links[j].source['#'] == nodeKey || graphData.links[j].target['#'] == nodeKey)
+							{
+								console.log('Removing link ' + graphData.links[j].label);
+								graphData.links.splice(j, 1);
+							}
+						}
+					}
+
+					if(data['VOID'])
+					{
+						return;
 					}
 
 					// TODO: Check if newNode shizzle is >-1, then use to set position and currently opened node...
@@ -427,7 +466,7 @@
 										return;
 									}
 								}
-
+								
 								if(gunSouls.indexOf(data[attrKey]['#']) >= 0)
 								{
 									graphData.links.push({ 'source': nodeKey, 'target': data[attrKey]['#'], label: attrKey });
@@ -458,12 +497,15 @@
 						while(sourceNodes.length > 0) // Assume all nodes in the array still exist
 						{
 							let sourceNode = gunRefs.setup[nodeKey][sourceNodes[0]]; // Currently handling this node...
-							graphData.links.push({ 'source': sourceNodes[0], 'target': nodeKey, label: sourceNode.label });
-							if(!gunRefs.exist[sourceNode])
+							if(gunSouls.indexOf(sourceNodes[0]) >= 0)
 							{
-								gunRefs.exist[sourceNode] = {};
+								graphData.links.push({ 'source': sourceNodes[0], 'target': nodeKey, label: sourceNode.label });
+								if(!gunRefs.exist[sourceNode])
+								{
+									gunRefs.exist[sourceNode] = {};
+								}
+								gunRefs.exist[sourceNode][sourceNodes[0]] = { label: sourceNode.label };
 							}
-							gunRefs.exist[sourceNode][sourceNodes[0]] = { label: sourceNode.label };
 							
 							delete gunRefs.setup[nodeKey][sourceNodes[0]];
 							sourceNodes.splice(0, 1);
@@ -482,7 +524,7 @@
 					gunKeys.forEach(function(nodeKey)
 					{
 						// Keep track of already processed nodes/souls:
-						if(gunSouls.indexOf(graph[nodeKey]['_']['#']) < 0)
+						if(gunSouls.indexOf(graph[nodeKey]['_']['#']) < 0 && !graph[nodeKey]['VOID']) // May be a bit hacky; to check for tombstoned nodes already...
 						{
 							// Attach listener to node:
 							gunDB.get(nodeKey).on(onNodeChange);
@@ -522,6 +564,7 @@
 	<body>
 		<div class="graph"></div>
 		<div class="properties hidden">
+			<button class="delete">Remove</button>
 			<input type="text" name="soul" value="" class="soul" readonly />
 			<ul></ul>
 		</div>
