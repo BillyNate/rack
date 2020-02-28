@@ -414,7 +414,7 @@
 						i = newNodeAt;
 						newNodeAt = -1;
 						graphData.nodes[i]['#'] = nodeKey;
-						graphData.nodes[i].label = nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '');
+						graphData.nodes[i].label = nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '\u2026' : '');
 						graphData.nodes[i].x = graphData.nodes[i].fx;
 						graphData.nodes[i].y = graphData.nodes[i].fy;
 						graphData.nodes[i].fx = graphData.nodes[i].fy = null;
@@ -426,7 +426,7 @@
 					
 					if(i < 0 && !data['VOID']) // Node not yet added to graphData
 					{
-						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '...' : '') }) - 1;
+						i = graphData.nodes.push({ '#': nodeKey, 'label': nodeKey.substring(0, 5) + (nodeKey.length > 5 ? '\u2026' : '') }) - 1;
 					}
 					else if(i >= 0 && data['VOID']) // Node in graphData, but now tombstoned
 					{
